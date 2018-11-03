@@ -1,0 +1,116 @@
+%% Preliminaries
+close all
+clear all
+clc
+
+%% Digital source
+par_no =49152;
+switch_graph = 1;
+b = digital_source(par_no, switch_graph);
+
+%% Channel coding
+par_G = [1,1,0,1;1,0,1,1;1,0,0,0;0,1,1,1;0,1,0,0;0,0,1,0;0,0,0,1;]; % generator matrix
+switch_off = 0;
+par_N_zeros = 0;
+c = channel_coding(b, par_G, par_N_zeros, switch_off);
+
+%% Modulation
+switch_mod = 0;
+switch_graph = 1;
+d = modulation(c, switch_mod, switch_graph);
+
+%% Pilot Insertion
+par_N_FFT = 1024; % Number of blocks
+par_N_block = length(d)/par_N_FFT; % length of a block
+switch_graph = 1;
+D = pilot_insertion(d, par_N_FFT, par_N_block, switch_graph);
+
+%% OFDM Tx
+par_N_CP = 256; % length of the guard interval
+switch_graph = 1;
+z = tx_ofdm_mod(D, par_N_FFT, par_N_CP, switch_graph);
+
+%% Tx Filter
+par_tx_w = 20;
+switch_graph = 1;
+switch_off = 0;
+s = tx_filter(z, par_tx_w, switch_graph, switch_off);
+
+%% Tx Hardware
+par_txthresh=1;
+switch_graph = 1;
+x = tx_hardware(s, par_txthresh, switch_graph);
+
+
+
+ SNR = 10:5:50;
+ N_iter = 10;
+ %BER = zeros(length(SNR),N_iter);
+ 
+ %for k = 1 : N_iter
+ for i= 1 : length(SNR)
+     
+     
+     
+%% CHANNEL
+y = Channel(x, SNR(i), 'AWGN');
+
+
+%% Rx Hardware
+par_rxthresh=1;
+if i==length(SNR)%&&k==N_iter
+    switch_graph = 1;
+else
+    switch_graph = 0;
+end
+%The above is done to only plot once at the end otherwise we would have oh
+%so many figures
+
+s_tilde = rx_hardware(y, par_rxthresh, switch_graph);
+
+%% RX-Filter
+par_rx_w = par_tx_w;
+switch_off = 0;
+
+if i==length(SNR)%&&k==N_iter
+    switch_graph = 1;
+else
+    switch_graph = 0;
+end
+%The above is done to only plot once at the end otherwise we would have oh
+%so many figures
+
+z_tilde = rx_filter(s_tilde, par_rx_w, switch_graph, switch_off);
+
+
+%% OFDM-Demodulation
+d_tilde = ofdm_demod(z_tilde, par_N_FFT, par_N_CP, switch_graph);
+
+%% Equalizer
+switch_mod = 1;
+d_bar = equalizer(d_tilde,switch_mod,switch_graph);
+
+%% Demodulation
+switch_mod = 0;
+switch_graph=0;
+c_hat = demodulation(d_bar, switch_mod, switch_graph);
+
+%% Channel Decoding 
+switch_off = 0;
+par_H=[1 0 1 0 1 0 1;0 1 1 0 0 1 1;0 0 0 1 1 1 1; 0 1 0 1 0 1 0];
+b_hat = channel_decoding(c_hat, par_H, par_N_zeros, switch_off);
+%BER(i,k) = digital_sink(b, b_hat);
+BER(i) = digital_sink(b, b_hat);
+%error= abs(b-b_hat);
+%BER(i,k)=sum(error)/length(b);
+ end
+ %end
+ %BER_loop = sum(BER,2)/N_iter;
+ 
+ figure;
+ semilogy(SNR,BER);
+ title('SNR vs BER');
+ xlabel('SNR in dB');
+ ylabel('BER');
+ grid on
+ 
